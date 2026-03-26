@@ -8,6 +8,7 @@ import time
 import re
 from typing import Any, Optional
 from urllib.parse import urljoin
+import json
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -120,7 +121,7 @@ class Api:
         return response
 
     async def _fetch(self, path: str, params: Optional[dict] = None) -> Any:
-        params = params or {}
+        params = dict(params or {})
         headers = self._build_headers(path, params)
         url = urljoin(self.base_url, path)
 
@@ -187,6 +188,24 @@ class Api:
         if not upcoming:
             return None
         return min(upcoming, key=lambda m: m["date"])
+    async def custom(self, url_path: str, params: Optional[dict] = None):
+        """Make a custom API call to any endpoint, with optional query parameters and JSON body."""
+        return self._unwrap(await self._fetch(url_path, params=params))
+    
+    async def get_matches_for_teams(self, team_ids: list[int]) -> list:
+        params = [("team_id[]", tid) for tid in team_ids]
+        return self._unwrap(await self._fetch("/matches/team", params=params))
+    
+    async def get_team_poules(self, club_id, team_id: int) -> list:
+        club_data = await self.get_club_info(club_id)
+        teams = club_data.get("teams", [])
+        team = next((t for t in teams if t["id"] == team_id), None)
+        if not team:
+            raise ValueError("Team not found")
+        
+        poule_id = team.get("recent_poule_id")
+        teaminfo = await self.get_poule_team(poule_id, team_id)
+        return teaminfo.get("team", {}).get("poules", {})
 
 
 # ----------------------------------------------------------------------
@@ -196,6 +215,11 @@ class Api:
 if __name__ == "__main__":
     async def main() -> None:
         async with await Api.create() as api:
+            poules = await api.get_team_poules("HH11AR3", 24687)
+            print(poules)
+            return
+
+
             clubs = await api.get_clubs()
             if not clubs:
                 print("No clubs returned.")
@@ -211,6 +235,7 @@ if __name__ == "__main__":
             teams = await api.get_club_teams(club_id)
             if teams:
                 team = teams[1]
+                
                 team_id = team["id"]
                 poule_id = team["recent_poule_id"]
                 print(f"\nFetching matches for team {team['name']} in poule {poule_id}")
@@ -221,4 +246,25 @@ if __name__ == "__main__":
                 all_matches = await api.get_team_matches(team_id, poule_id)
                 print(f"Total matches this season: {len(all_matches)}")
 
+    async def repl():
+        async with await Api.create() as api:
+            while True:
+                inp = input("Enter url path: ")
+                if inp.lower() in {"exit", "quit"}:
+                    break
+                try:
+                    s = inp.split("?")
+                    if len(s) == 2:
+                        url_path, query = s
+                        params = dict(q.split("=") for q in query.split("&"))
+                    else:
+                        url_path = inp
+                        params = None
+                    api_response = await api.custom(url_path, params=params)
+                    print("Response: ", json.dumps(api_response, indent=2))
+                    print()
+                except Exception as e:
+                    print("Error: ", e)
+                    print()
+                
     asyncio.run(main())
