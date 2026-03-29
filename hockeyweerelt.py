@@ -90,7 +90,9 @@ class Api:
     async def init(self) -> None:
         """Register this device and store the authorisation token."""
         self.uuid = str(uuid.uuid4())
-        r = await self._post("/device/register", params={"os": "Web", "uuid": self.uuid})
+        r = await self._post(
+            "/device/register", params={"os": "Web", "uuid": self.uuid}
+        )
         self.headers["X-HAPI-Authorization"] = r["token"]
 
     # ------------------------------------------------------------------
@@ -109,7 +111,10 @@ class Api:
         t = int(time.time())
         headers = self.headers.copy()
         headers["X-HAPI-Signature"] = Crypto.generate_signature(
-            path, params, t, self.uuid  # type: ignore[arg-type]
+            path,
+            params,
+            t,
+            self.uuid,  # type: ignore[arg-type]
         )
         headers["X-HAPI-Timestamp"] = str(t)
         return headers
@@ -136,13 +141,17 @@ class Api:
             _LOGGER.error("GET %s failed: %s", path, e)
             raise
 
-    async def _post(self, path: str, params: Optional[dict] = None, data: Optional[dict] = None) -> Any:
+    async def _post(
+        self, path: str, params: Optional[dict] = None, data: Optional[dict] = None
+    ) -> Any:
         params = params or {}
         headers = self._build_headers(path, params)
         url = urljoin(self.base_url, path)
 
         try:
-            async with self.session.post(url, params=params, json=data, headers=headers) as resp:
+            async with self.session.post(
+                url, params=params, json=data, headers=headers
+            ) as resp:
                 resp.raise_for_status()
                 return await resp.json()
         except aiohttp.ClientResponseError as e:
@@ -177,32 +186,36 @@ class Api:
         all_matches: list = data.get("poule", {}).get("matches", [])
         team_id_int = int(team_id)
         return [
-            m for m in all_matches
+            m
+            for m in all_matches
             if m["home"]["id"] == team_id_int or m["away"]["id"] == team_id_int
         ]
 
-    async def get_next_team_match(self, team_id: int | str, poule_id: int | str) -> Optional[dict]:
+    async def get_next_team_match(
+        self, team_id: int | str, poule_id: int | str
+    ) -> dict | None:
         """Return the next scheduled match for the team, or None if there are none."""
         matches = await self.get_team_matches(team_id, poule_id)
         upcoming = [m for m in matches if m.get("status") == "scheduled"]
         if not upcoming:
             return None
         return min(upcoming, key=lambda m: m["date"])
-    async def custom(self, url_path: str, params: Optional[dict] = None):
+
+    async def custom(self, url_path: str, params: dict | None = None):
         """Make a custom API call to any endpoint, with optional query parameters and JSON body."""
         return self._unwrap(await self._fetch(url_path, params=params))
-    
+
     async def get_matches_for_teams(self, team_ids: list[int]) -> list:
         params = [("team_id[]", tid) for tid in team_ids]
         return self._unwrap(await self._fetch("/matches/team", params=params))
-    
+
     async def get_team_poules(self, club_id, team_id: int) -> list:
         club_data = await self.get_club_info(club_id)
         teams = club_data.get("teams", [])
         team = next((t for t in teams if t["id"] == team_id), None)
         if not team:
             raise ValueError("Team not found")
-        
+
         poule_id = team.get("recent_poule_id")
         teaminfo = await self.get_poule_team(poule_id, team_id)
         return teaminfo.get("team", {}).get("poules", {})
@@ -213,12 +226,12 @@ class Api:
 # ----------------------------------------------------------------------
 
 if __name__ == "__main__":
+
     async def main() -> None:
         async with await Api.create() as api:
             poules = await api.get_team_poules("HH11AR3", 24687)
             print(poules)
             return
-
 
             clubs = await api.get_clubs()
             if not clubs:
@@ -235,7 +248,7 @@ if __name__ == "__main__":
             teams = await api.get_club_teams(club_id)
             if teams:
                 team = teams[1]
-                
+
                 team_id = team["id"]
                 poule_id = team["recent_poule_id"]
                 print(f"\nFetching matches for team {team['name']} in poule {poule_id}")
@@ -266,5 +279,5 @@ if __name__ == "__main__":
                 except Exception as e:
                     print("Error: ", e)
                     print()
-                
+
     asyncio.run(main())
