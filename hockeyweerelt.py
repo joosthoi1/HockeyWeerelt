@@ -192,10 +192,14 @@ class Api:
         ]
 
     async def get_next_team_match(
-        self, team_id: int | str, poule_id: int | str
+        self, team_id: int | str, poule_id: int | str | None
     ) -> dict | None:
         """Return the next scheduled match for the team, or None if there are none."""
-        matches = await self.get_team_matches(team_id, poule_id)
+
+        if poule_id is None:
+            matches = await self.get_matches_for_teams([team_id])
+        else:
+            matches = await self.get_team_matches(team_id, poule_id)
         upcoming = [m for m in matches if m.get("status") == "scheduled"]
         if not upcoming:
             return None
