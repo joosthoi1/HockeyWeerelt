@@ -200,7 +200,7 @@ class Api:
             matches = await self.get_matches_for_teams([team_id])
         else:
             matches = await self.get_team_matches(team_id, poule_id)
-        upcoming = [m for m in matches if m.get("status") == "scheduled"]
+        upcoming = [m for m in matches if m.get("status") in ("scheduled", "announced")]
         if not upcoming:
             return None
         return min(upcoming, key=lambda m: m["date"])
